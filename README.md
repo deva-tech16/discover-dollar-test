@@ -62,28 +62,119 @@ docker compose down -v
 
 ---
 
-## Docker Compose
+## Docker files
 
-This project uses **Docker Compose v2** (v5.0.2). The `version:` field at the top of `docker-compose.yml` is not needed in v2 and will print a warning if left in — it's safe to remove it.
+### backend/Dockerfile
 
-The `docker compose` command (no hyphen) is used instead of the older `docker-compose`.
+```dockerfile
+# Use lightweight Node image
+FROM node:18-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install --production
+
+COPY . .
+
+EXPOSE 8080
+CMD ["node", "server.js"]
+```
+
+Uses `node:18-alpine` to keep the image small. Only production dependencies are installed — no devDependencies end up in the final image.
+
+---
+
+### frontend/Dockerfile
+
+```dockerfile
+# Stage 1 — Build Angular
+FROM node:18 AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+RUN npm run build -- --configuration production
+
+# Stage 2 — Serve with Nginx
+FROM nginx:alpine
+COPY --from=build /app/dist/angular-15-crud /usr/share/nginx/html
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
+```
+
+Two-stage build — the first stage compiles the Angular app, the second stage throws away Node entirely and just serves the compiled output via Nginx. The final image is tiny.
+
+---
+
+### docker-compose.yml
+
+```yaml
+services:
+  mongodb:
+    image: mongo:7
+    container_name: mongo
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  backend:
+    build: ./backend
+    container_name: discover-backend
+    restart: always
+    environment:
+      DB_URL: "mongodb://mongodb:27017/cruddb"
+    depends_on:
+      - mongodb
+
+  frontend:
+    build: ./frontend
+    container_name: discover-frontend
+    restart: always
+    depends_on:
+      - backend
+
+  nginx:
+    image: nginx:alpine
+    container_name: reverse-proxy
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - frontend
+      - backend
+
+volumes:
+  mongo_data:
+```
+
+A few things worth knowing about this setup:
+
+- The `version:` field has been removed — it's deprecated in Docker Compose v2 and just prints a warning if you leave it in
+- `depends_on` controls startup order but doesn't wait for a service to be fully ready, just started
+- MongoDB data is stored in a named volume (`mongo_data`) so it survives container restarts
+- The backend connects to MongoDB using the service name `mongodb` as the hostname — Docker handles the DNS resolution internally
+- Only Nginx is exposed to the outside world on port 80. The backend and frontend are only reachable through it
 
 ---
 
 ## How the containers fit together
-
-All four services are defined in `docker-compose.yml`. Nginx is the only one exposed to the outside world on port 80 — it proxies `/api/` requests to the backend and everything else to the frontend. The backend talks to MongoDB using Docker's internal DNS (`mongodb:27017`), so there's no hardcoded IP anywhere.
 
 ```
 Browser → Nginx :80 → Frontend (Angular)
                     → Backend  :8080 → MongoDB :27017
 ```
 
+Nginx is the single entry point. It proxies `/api/` calls to the Node backend and serves everything else from the Angular frontend container.
+
 ---
 
 ## Nginx config
 
-Put this in `./nginx/default.conf`:
+`./nginx/default.conf`:
 
 ```nginx
 server {
@@ -124,7 +215,7 @@ Go to **Settings → Secrets and variables → Actions** in your repo and add th
 | `VM_USER` | SSH user (usually `ubuntu`) |
 | `VM_SSH_KEY` | Your private SSH key |
 
-> One thing worth noting — if the `DOCKERHUB_USERNAME` secret has uppercase letters or a trailing space, the Docker build step will fail with `invalid reference format` even though login succeeds. If that happens, delete the secret and re-type it manually.
+> If the `DOCKERHUB_USERNAME` secret has uppercase letters or a trailing space, the build step will fail with `invalid reference format` even though login succeeds. If that happens, delete the secret and re-type it manually.
 
 ---
 
@@ -159,3 +250,15 @@ docker exec -it discover-backend sh
 
 ---
 
+## Screenshots
+
+> Add screenshots to a `/screenshots` folder and update these paths.
+
+**CI/CD run**
+![cicd](./screenshots/cicd-pipeline.png)
+
+**Docker Hub images**
+![dockerhub](./screenshots/dockerhub-images.png)
+
+**App UI**
+![ui](./screenshots/app-ui.png)
