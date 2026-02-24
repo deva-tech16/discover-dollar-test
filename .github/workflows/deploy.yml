@@ -13,26 +13,26 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      
+      # 1️⃣ Login to DockerHub
       - name: Login to DockerHub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
-      
+      # 2️⃣ Build & Push Backend
       - name: Build & Push Backend
         run: |
           docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/discover-backend:latest ./backend
           docker push ${{ secrets.DOCKERHUB_USERNAME }}/discover-backend:latest
 
-      
+      # 3️⃣ Build & Push Frontend
       - name: Build & Push Frontend
         run: |
           docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/discover-frontend:latest ./frontend
           docker push ${{ secrets.DOCKERHUB_USERNAME }}/discover-frontend:latest
 
-      
+      # 4️⃣ SSH into VM and Deploy
       - name: Deploy to VM
         uses: appleboy/ssh-action@v1.0.3
         with:
