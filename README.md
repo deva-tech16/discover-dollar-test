@@ -250,15 +250,3 @@ docker exec -it discover-backend sh
 
 ---
 
-## Screenshots
-
-> Add screenshots to a `/screenshots` folder and update these paths.
-
-**CI/CD run**
-![cicd](./screenshots/cicd-pipeline.png)
-
-**Docker Hub images**
-![dockerhub](./screenshots/dockerhub-images.png)
-
-**App UI**
-![ui](./screenshots/app-ui.png)
